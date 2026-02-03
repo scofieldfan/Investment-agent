@@ -1,0 +1,6 @@
+veadk-python
+baostock
+streamlit
+pandas
+plotly
+python-dotenv
