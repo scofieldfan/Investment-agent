@@ -81,6 +81,19 @@ with st.sidebar:
                     args=(code,),
                 )
 
+    st.markdown("---")
+    st.subheader("大师持仓参考")
+    st.markdown(
+        "[查看 Dataroma 大师持仓](https://www.dataroma.com/m/managers.php)"
+    )
+    holdings_data = [
+        {"大师": "巴菲特 · Berkshire", "代表持仓": "AAPL, BAC, KO, AXP, CVX"},
+        {"大师": "李录 · Himalaya", "代表持仓": "AAPL, BAC, BRK.B, GOOG"},
+        {"大师": "阿克曼 · Pershing", "代表持仓": "CMG, GOOG, HLT, QSR"},
+    ]
+    st.table(pd.DataFrame(holdings_data))
+    st.caption("示例来自 Dataroma 公开披露，主要为美股代码，仅供参考。")
+
 if (run_btn or st.session_state.run_analysis) and symbol_input:
     st.session_state.run_analysis = False
     formatted_symbol = format_stock_code(symbol_input)
