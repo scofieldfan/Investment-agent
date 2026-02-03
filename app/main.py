@@ -93,7 +93,7 @@ with st.sidebar:
         "[查看 Dataroma 大师持仓](https://www.dataroma.com/m/managers.php)"
     )
     st.table(pd.DataFrame(SAMPLE_HOLDINGS))
-    st.caption("示例来自 Dataroma 公开信息，主要为美股代码，仅供参考。")
+    st.caption("示例来自 Dataroma 公开信息（截至 2025-01），主要为美股代码，仅供参考。")
 
 if (run_btn or st.session_state.run_analysis) and symbol_input:
     st.session_state.run_analysis = False
