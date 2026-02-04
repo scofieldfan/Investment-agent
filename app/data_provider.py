@@ -1,6 +1,7 @@
 import datetime
 import baostock as bs
 import threading
+import logging
 import pandas as pd
 from app.database import get_cached_data, save_to_cache
 
@@ -22,6 +23,7 @@ def format_stock_code(symbol: str) -> str:
 # --- Core Fetching Logic ---
 
 
+LOGGER = logging.getLogger(__name__)
 _LOGIN_LOCK = threading.Lock()
 _LOGGED_IN = False
 
@@ -29,14 +31,18 @@ _LOGGED_IN = False
 def _login():
     global _LOGGED_IN
     if _LOGGED_IN:
+        LOGGER.debug("Baostock already logged in")
         return
     with _LOGIN_LOCK:
         if _LOGGED_IN:
             return
+        LOGGER.info("Logging in to Baostock")
         lg = bs.login()
         if lg.error_code != "0":
+            LOGGER.error("Baostock login failed: %s %s", lg.error_code, lg.error_msg)
             raise RuntimeError(f"baostock login failed: {lg.error_code} {lg.error_msg}")
         _LOGGED_IN = True
+        LOGGER.info("Baostock login succeeded")
 
 
 def _logout(force: bool = False):
@@ -44,6 +50,7 @@ def _logout(force: bool = False):
     if not force:
         return
     try:
+        LOGGER.info("Logging out from Baostock (force=%s)", force)
         bs.logout()
     finally:
         _LOGGED_IN = False
@@ -53,6 +60,8 @@ def _collect_rows(result):
     rows = []
     while result.error_code == "0" and result.next():
         rows.append(result.get_row_data())
+    if result.error_code != "0":
+        LOGGER.warning("Baostock query error: %s %s", result.error_code, result.error_msg)
     return rows
 
 
@@ -60,10 +69,19 @@ def _query_quarterly(report_func, code: str, years: int = 5):
     today = datetime.date.today()
     start_year = today.year - years + 1
     data = []
+    LOGGER.info("Querying quarterly data for %s (%s years)", code, years)
     for y in range(start_year, today.year + 1):
         for q in (1, 2, 3, 4):
             rs = report_func(code=code, year=y, quarter=q)
             if rs.error_code != "0":
+                LOGGER.warning(
+                    "Quarterly query failed for %s Y%sQ%s: %s %s",
+                    code,
+                    y,
+                    q,
+                    rs.error_code,
+                    rs.error_msg,
+                )
                 continue
             rows = _collect_rows(rs)
             if rows:
@@ -75,8 +93,10 @@ def _query_quarterly(report_func, code: str, years: int = 5):
 def get_company_name(symbol: str) -> str:
     f_symbol = format_stock_code(symbol)
     cache_key = f"{f_symbol}_company_name"
+    LOGGER.info("Fetching company name for %s", f_symbol)
     cached = get_cached_data(cache_key, max_age_days=30)
     if cached:
+        LOGGER.info("Using cached company name for %s", f_symbol)
         return cached.get("name", "")
 
     try:
@@ -88,7 +108,8 @@ def get_company_name(symbol: str) -> str:
             name = df.iloc[0].get("code_name", "")
             save_to_cache(cache_key, {"name": name})
             return name
-    except Exception:
+    except Exception as exc:
+        LOGGER.exception("Failed to fetch company name for %s: %s", f_symbol, exc)
         return ""
     finally:
         # keep session to avoid frequent login/logout
@@ -103,10 +124,12 @@ def fetch_financial_report(symbol: str, report_type: str):
     """
     f_symbol = format_stock_code(symbol)
     cache_key = f"{f_symbol}_{report_type}_report"
+    LOGGER.info("Fetching %s report for %s", report_type, f_symbol)
 
     # Financial reports don't change daily, cache for 7 days
     cached = get_cached_data(cache_key, max_age_days=7)
     if cached:
+        LOGGER.info("Using cached %s report for %s", report_type, f_symbol)
         return pd.DataFrame(cached)
 
     try:
@@ -118,13 +141,22 @@ def fetch_financial_report(symbol: str, report_type: str):
         elif report_type == "balance":
             df = _query_quarterly(bs.query_dupont_data, f_symbol, years=5)
         else:
+            LOGGER.warning("Unknown report type requested: %s", report_type)
             return pd.DataFrame()
 
         if not df.empty:
             save_to_cache(cache_key, df.to_dict(orient="records"))
+            LOGGER.info(
+                "Saved %s report for %s with %s rows",
+                report_type,
+                f_symbol,
+                len(df),
+            )
+        else:
+            LOGGER.warning("Empty %s report for %s", report_type, f_symbol)
         return df
     except Exception as e:
-        print(f"Error fetching {report_type} for {symbol}: {e}")
+        LOGGER.exception("Error fetching %s for %s: %s", report_type, f_symbol, e)
         return pd.DataFrame()
     finally:
         # keep session to avoid frequent login/logout
@@ -139,11 +171,13 @@ def get_buffett_metrics(symbol: str, annual_only: bool = True):
     Aggregates financial data to produce Buffett-style metrics.
     Returns a dictionary structure suitable for visualization.
     """
+    LOGGER.info("Calculating Buffett metrics for %s (annual_only=%s)", symbol, annual_only)
     cash_flow_df = fetch_financial_report(symbol, "cash_flow")
     income_df = fetch_financial_report(symbol, "income")
     balance_df = fetch_financial_report(symbol, "balance")
 
     if cash_flow_df.empty or income_df.empty or balance_df.empty:
+        LOGGER.warning("Missing data for %s: cash_flow=%s income=%s balance=%s", symbol, cash_flow_df.empty, income_df.empty, balance_df.empty)
         return {"error": "Could not fetch complete financial data."}
 
     def process_df(df):
@@ -213,6 +247,7 @@ def get_buffett_metrics(symbol: str, annual_only: bool = True):
         bal_row = bal[bal["date"] == d]
 
         if cf_row.empty or bal_row.empty:
+            LOGGER.debug("Skipping %s because cash flow or balance row missing", d_str)
             continue
 
         cf_row = cf_row.iloc[0]
@@ -283,12 +318,14 @@ def get_buffett_metrics(symbol: str, annual_only: bool = True):
             analysis_data.append(item)
 
         except Exception as e:
+            LOGGER.exception("Failed to compute metrics for %s on %s: %s", symbol, d_str, e)
             continue
 
     # Sort by date ascending
     analysis_data.sort(key=lambda x: x["date"])
 
     company_name = get_company_name(symbol)
+    LOGGER.info("Metrics ready for %s with %s rows", symbol, len(analysis_data))
     return {"symbol": symbol, "company_name": company_name, "metrics": analysis_data}
 
 
