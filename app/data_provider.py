@@ -109,8 +109,8 @@ def get_company_name(symbol: str) -> str:
             name = df.iloc[0].get("code_name", "")
             save_to_cache(cache_key, {"name": name})
             return name
-    except Exception as exc:
-        LOGGER.exception("Failed to fetch company name for %s: %s", f_symbol, exc)
+    except Exception:
+        LOGGER.exception("Failed to fetch company name for %s", f_symbol)
         return ""
     finally:
         # keep session to avoid frequent login/logout
@@ -156,8 +156,8 @@ def fetch_financial_report(symbol: str, report_type: str):
         else:
             LOGGER.warning("Empty %s report for %s", report_type, f_symbol)
         return df
-    except Exception as e:
-        LOGGER.exception("Error fetching %s for %s: %s", report_type, f_symbol, e)
+    except Exception:
+        LOGGER.exception("Error fetching %s for %s", report_type, f_symbol)
         return pd.DataFrame()
     finally:
         # keep session to avoid frequent login/logout
@@ -324,8 +324,8 @@ def get_buffett_metrics(symbol: str, annual_only: bool = True):
             }
             analysis_data.append(item)
 
-        except Exception as e:
-            LOGGER.exception("Failed to compute metrics for %s on %s: %s", symbol, d_str, e)
+        except Exception:
+            LOGGER.exception("Failed to compute metrics for %s on %s", symbol, d_str)
             continue
 
     # Sort by date ascending
