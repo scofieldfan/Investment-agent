@@ -1,5 +1,6 @@
 import os
 import sys
+import logging
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -17,8 +18,10 @@ from app.data_provider import get_buffett_metrics, format_stock_code
 from app.database import init_db
 from app.agent_brain import run_agent_analysis
 
-# Ensure DB is ready
+LOGGER = logging.getLogger(__name__)
+
 init_db()
+LOGGER.info("Streamlit app initialized")
 
 # Page Config
 st.set_page_config(page_title="巴菲特式投资体检仪表盘", layout="wide")
@@ -98,12 +101,14 @@ with st.sidebar:
 if (run_btn or st.session_state.run_analysis) and symbol_input:
     st.session_state.run_analysis = False
     formatted_symbol = format_stock_code(symbol_input)
+    LOGGER.info("Starting analysis for input=%s formatted=%s", symbol_input, formatted_symbol)
 
     with st.spinner(f"正在读取 {formatted_symbol} 的财报数据..."):
         # 1. Fetch Data for Charts
         data_payload = get_buffett_metrics(formatted_symbol, annual_only=True)
 
     if "error" in data_payload:
+        LOGGER.warning("Data payload error for %s: %s", formatted_symbol, data_payload["error"])
         st.error(data_payload["error"])
     else:
         company_name = data_payload.get("company_name") or ""
@@ -112,8 +117,10 @@ if (run_btn or st.session_state.run_analysis) and symbol_input:
             st.markdown(f"**当前分析：{company_name}（{formatted_symbol}）**")
         df = pd.DataFrame(metrics)
         if df.empty:
+            LOGGER.warning("No metrics returned for %s", formatted_symbol)
             st.warning("未获取到数据，请尝试其他股票代码。")
         else:
+            LOGGER.info("Rendering metrics for %s with %s rows", formatted_symbol, len(df))
             # Layout
             col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
 
@@ -213,6 +220,7 @@ if (run_btn or st.session_state.run_analysis) and symbol_input:
             volc_sk = os.getenv("VOLC_SECRET_KEY")
 
             if not (volc_ak and volc_sk):
+                LOGGER.info("VOLC credentials missing; using rules engine")
                 st.warning(
                     "仅检测到 API KEY（无 AK/SK），模型分析不可用，已切换为规则引擎解读。"
                 )
@@ -234,6 +242,7 @@ if (run_btn or st.session_state.run_analysis) and symbol_input:
                 )
             else:
                 with st.spinner("正在生成 AI 解读..."):
+                    LOGGER.info("Running AI analysis for %s", formatted_symbol)
                     query = (
                         f"请分析 {formatted_symbol} 的财务质量，基于 ROE 与自由现金流趋势判断是否具备长期护城河。"
                     )

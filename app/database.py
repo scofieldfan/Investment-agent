@@ -1,8 +1,10 @@
 import sqlite3
 import json
 import os
+import logging
 from datetime import datetime, timedelta
 
+LOGGER = logging.getLogger(__name__)
 DB_PATH = "finance.db"
 
 
@@ -13,6 +15,7 @@ def get_db_connection():
 
 
 def init_db():
+    LOGGER.info("Initializing cache database at %s", DB_PATH)
     conn = get_db_connection()
     conn.execute(
         """
@@ -37,7 +40,11 @@ def get_cached_data(key: str, max_age_days: int = 1):
     if row:
         updated_at = datetime.strptime(row["updated_at"], "%Y-%m-%d %H:%M:%S")
         if datetime.now() - updated_at < timedelta(days=max_age_days):
+            LOGGER.info("Cache hit for key=%s", key)
             return json.loads(row["data"])
+        LOGGER.info("Cache stale for key=%s", key)
+    else:
+        LOGGER.info("Cache miss for key=%s", key)
     return None
 
 
@@ -52,3 +59,4 @@ def save_to_cache(key: str, data: dict):
     )
     conn.commit()
     conn.close()
+    LOGGER.info("Cache saved for key=%s", key)

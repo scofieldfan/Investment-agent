@@ -1,4 +1,5 @@
 import os
+import logging
 from typing import Annotated
 from veadk import Agent, Runner
 from dotenv import load_dotenv
@@ -9,6 +10,7 @@ load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
 
 from app.data_provider import get_buffett_metrics
 
+LOGGER = logging.getLogger(__name__)
 
 # Wrapper for the tool to be friendly to the Agent
 def fetch_buffett_data(
@@ -20,6 +22,7 @@ def fetch_buffett_data(
     """
     data = get_buffett_metrics(symbol)
     if "error" in data:
+        LOGGER.warning("Agent data fetch failed for %s: %s", symbol, data["error"])
         return f"Error: {data['error']}"
 
     # Summarize specifically for the LLM to reduce token usage if data is huge
@@ -32,9 +35,11 @@ def get_agent():
     model_endpoint = os.getenv("VOLC_MODEL_ENDPOINT")
 
     if not api_key:
+        LOGGER.error("ARK_API_KEY missing; cannot initialize agent")
         raise ValueError("ARK_API_KEY not found in .env")
 
     # Initialize Agent
+    LOGGER.info("Initializing Agent with model endpoint %s", model_endpoint)
     agent = Agent(
         name="BuffettAnalyst",
         description="A value investing assistant inspired by Warren Buffett.",
@@ -63,15 +68,18 @@ def run_agent_analysis(query: str):
 
     agent = get_agent()
     runner = Runner(agent=agent, app_name="investment_dashboard")
+    LOGGER.info("Running agent analysis query")
 
     async def _run():
         session = await runner.short_term_memory.create_session(
             app_name="investment_dashboard",
             user_id="default_user",
         )
+        LOGGER.info("Agent session created: %s", session.id)
         response = await runner.run(
             session_id=session.id, user_id="default_user", query=query
         )
+        LOGGER.info("Agent response received")
         return response
 
     return asyncio.run(_run())
