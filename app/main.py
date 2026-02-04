@@ -18,7 +18,6 @@ from app.data_provider import get_buffett_metrics, format_stock_code
 from app.database import init_db
 from app.agent_brain import run_agent_analysis
 
-# Ensure DB is ready
 LOGGER = logging.getLogger(__name__)
 
 init_db()

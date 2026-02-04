@@ -5,6 +5,8 @@ import logging
 import pandas as pd
 from app.database import get_cached_data, save_to_cache
 
+LOGGER = logging.getLogger(__name__)
+
 
 # --- Helpers ---
 def format_stock_code(symbol: str) -> str:
@@ -23,7 +25,6 @@ def format_stock_code(symbol: str) -> str:
 # --- Core Fetching Logic ---
 
 
-LOGGER = logging.getLogger(__name__)
 _LOGIN_LOCK = threading.Lock()
 _LOGGED_IN = False
 
@@ -177,7 +178,13 @@ def get_buffett_metrics(symbol: str, annual_only: bool = True):
     balance_df = fetch_financial_report(symbol, "balance")
 
     if cash_flow_df.empty or income_df.empty or balance_df.empty:
-        LOGGER.warning("Missing data for %s: cash_flow=%s income=%s balance=%s", symbol, cash_flow_df.empty, income_df.empty, balance_df.empty)
+        LOGGER.warning(
+            "Missing data for %s: cash_flow=%s income=%s balance=%s",
+            symbol,
+            "missing" if cash_flow_df.empty else "present",
+            "missing" if income_df.empty else "present",
+            "missing" if balance_df.empty else "present",
+        )
         return {"error": "Could not fetch complete financial data."}
 
     def process_df(df):
