@@ -156,9 +156,7 @@ def fetch_financial_report(symbol: str, report_type: str):
         else:
             LOGGER.warning("Empty %s report for %s", report_type, f_symbol)
         return df
-    except Exception as exc:
-        if isinstance(exc, (SystemExit, KeyboardInterrupt)):
-            raise
+    except Exception:
         LOGGER.exception("Error fetching %s for %s", report_type, f_symbol)
         return pd.DataFrame()
     finally:
@@ -326,9 +324,7 @@ def get_buffett_metrics(symbol: str, annual_only: bool = True):
             }
             analysis_data.append(item)
 
-        except Exception as exc:
-            if isinstance(exc, (SystemExit, KeyboardInterrupt)):
-                raise
+        except Exception:
             LOGGER.exception("Failed to compute metrics for %s on %s", symbol, d_str)
             continue
 
